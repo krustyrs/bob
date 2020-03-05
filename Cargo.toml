@@ -8,3 +8,5 @@ edition = "2018"
 
 [dependencies]
 http-types = "1.0.1"
+lazy_static = "1.4.0"
+fancy-regex = "0.3.3"
