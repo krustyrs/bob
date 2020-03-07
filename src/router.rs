@@ -11,19 +11,20 @@ lazy_static! {
 
 #[derive(Debug, Clone)]
 pub struct RouteConfig {
-  pub method: Method,
-  pub path: &'static str,
+  pub vhost: String,
 }
 
+#[derive(PartialEq)]
 struct Record {
-  path: &'static str,
+  path: String,
   segments: Vec<Segment>,
-  params: Vec<&'static str>,
-  fingerprint: Vec<&'static str>,
+  params: Vec<String>,
+  fingerprint: String,
 }
 
+#[derive(PartialEq)]
 struct Segment {
-  literal: &'static str,
+  literal: String,
 }
 
 struct RouterInner {
@@ -44,12 +45,17 @@ impl Router {
     }
   }
 
-  pub fn add(&mut self, config: RouteConfig) -> &mut Router {
-    let analysis = self.analyze(config.path);
+  pub fn add(
+    &mut self,
+    method: Method,
+    path: impl AsRef<str>,
+    config: Option<RouteConfig>,
+  ) -> &mut Router {
+    let analysis = self.analyze(path);
     self
       .mut_inner()
       .routes
-      .entry(config.method)
+      .entry(method)
       .or_insert(vec![])
       .push(analysis);
 
@@ -57,42 +63,55 @@ impl Router {
   }
 
   pub fn route(self, method: Method, url: &Url) -> String {
-    let body = match (method, url.path()) {
-      (Method::Get, "/") => "Hello",
-      (Method::Get, "/version") => "Version",
-      (Method::Post, "/version") => "Posted version",
-      _ => "",
+    let segments = if url.path().len() == 1 {
+      vec![""]
+    } else {
+      let mut parts: Vec<&str> = url.path().split("/").collect();
+      parts.split_off(1)
     };
 
-    body.to_string()
+    match self.inner.routes.get(&method) {
+      None => "".to_string(),
+      Some(records) => {
+        for record in records {
+          if record.segments.len() == segments.len() {
+            return url.path().to_string();
+          }
+        }
+
+        "".to_string()
+      }
+    }
   }
 
   fn mut_inner(&mut self) -> &mut RouterInner {
     Arc::get_mut(&mut self.inner).expect("error obtaining mutable router")
   }
 
-  fn analyze(&mut self, path: &'static str) -> Record {
-    RE_VALIDATE_PATH.is_match(path).unwrap();
+  fn analyze<S: AsRef<str>>(&mut self, path: S) -> Record {
+    RE_VALIDATE_PATH.is_match(path.as_ref()).unwrap();
 
-    let path_parts = path.split("/");
+    let path_parts = path.as_ref().split("/");
     let mut fingers = vec![];
     let mut segments = vec![];
 
-    for mut path_part in path_parts {
+    for path_part in path_parts {
       let path_part = path_part.to_lowercase();
+
+      // Literal
       if path_part.find("{") == None {
-        fingers.push(path_part.clone());
-        segments.push(Segment {
-          literal: &path_part.clone(),
-        });
+        let literal = path_part.clone();
+        fingers.push(path_part);
+        segments.push(Segment { literal });
+        continue;
       }
     }
 
     let record = Record {
-      path,
+      path: path.as_ref().to_string(),
       segments,
       params: vec![],
-      fingerprint: vec![],
+      fingerprint: format!("/{}", fingers.join("/")),
     };
     record
   }
@@ -105,19 +124,22 @@ mod tests {
   #[test]
   fn can_add_route() {
     let mut router = Router::new();
-    router.add(RouteConfig {
-      method: Method::Get,
-      path: "/test",
-    });
+    router.add(Method::Get, "/test", None);
   }
 
   #[test]
   fn fails_invalid_path() {
     let mut router = Router::new();
-    router.add(RouteConfig {
-      method: Method::Get,
-      path: "/{p}{x}b",
-    });
+    router.add(Method::Get, "/{p}{x}b", None);
+  }
+
+  fn can_route() {
+    let mut router = Router::new();
+    router.add(Method::Get, "/test", None);
+    let url = Url::parse("http://test.com/test");
+    assert!(!url.is_err());
+    let found = router.route(Method::Get, &url.unwrap());
+    assert_eq!(found, "/test");
   }
 
   #[test]
