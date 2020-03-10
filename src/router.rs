@@ -3,6 +3,9 @@ use http_types::{Method, Url};
 use std::collections::HashMap;
 use std::sync::Arc;
 
+mod segment;
+use segment::{Analysis, Segment, SegmentRecord};
+
 lazy_static! {
   static ref RE_PARSE_PARAM: Regex = Regex::new(r"((?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+)|(?:\{(\w+)(?:(\*)(\d+)?)?(\?)?\})").unwrap();
   static ref RE_VALIDATE_PATH: Regex = Regex::new(r"(?:^\/$)|(?:^(?:\/(?:(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+|(?:\{\w+(?:\*[1-9]\d*)?\})|(?:(?:(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+(?:\{\w+\??\}))+(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})*)|(?:(?:\{\w+\??\})(?:(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+(?:\{\w+\??\}))+(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})*)|(?:(?:\{\w+\??\})(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+)))*(?:\/(?:\{\w+(?:(?:\*(?:[1-9]\d*)?)|(?:\?))?\})?)?$)").unwrap();
@@ -14,21 +17,13 @@ pub struct RouteConfig {
   pub vhost: String,
 }
 
-#[derive(PartialEq)]
-struct Record {
-  path: String,
-  segments: Vec<Segment>,
-  params: Vec<String>,
-  fingerprint: String,
-}
-
-#[derive(PartialEq)]
-struct Segment {
-  literal: String,
+struct Entry {
+  routes: Vec<String>, // TODO: Change to handlers
+  segment: Segment,
 }
 
 struct RouterInner {
-  routes: HashMap<Method, Vec<Record>>,
+  table: HashMap<Method, Entry>,
 }
 
 #[derive(Clone)]
@@ -40,25 +35,28 @@ impl Router {
   pub fn new() -> Router {
     Router {
       inner: Arc::new(RouterInner {
-        routes: HashMap::new(),
+        table: HashMap::new(),
       }),
     }
   }
 
-  pub fn add(
+  pub fn add(&mut self, method: Method, path: impl AsRef<str>) -> &mut Router {
+    self.add_with_config(method, path, None)
+  }
+
+  pub fn add_with_config(
     &mut self,
     method: Method,
     path: impl AsRef<str>,
     config: Option<RouteConfig>,
   ) -> &mut Router {
     let analysis = self.analyze(path);
-    self
-      .mut_inner()
-      .routes
-      .entry(method)
-      .or_insert(vec![])
-      .push(analysis);
+    let mut entry = self.mut_inner().table.entry(method).or_insert(Entry {
+      routes: vec![],
+      segment: Segment::new(),
+    });
 
+    entry.segment.add(analysis);
     self
   }
 
@@ -70,7 +68,7 @@ impl Router {
       parts.split_off(1)
     };
 
-    match self.inner.routes.get(&method) {
+    match self.inner.table.get(&method) {
       None => "".to_string(),
       Some(records) => {
         for record in records {
@@ -84,17 +82,20 @@ impl Router {
     }
   }
 
+  //fn lookup<'a>(self, path: &'a str, segments: Vec<&'a str>, records: Vec<Record>)
+
   fn mut_inner(&mut self) -> &mut RouterInner {
     Arc::get_mut(&mut self.inner).expect("error obtaining mutable router")
   }
 
-  fn analyze<S: AsRef<str>>(&mut self, path: S) -> Record {
+  fn analyze<S: AsRef<str>>(&mut self, path: S) -> Analysis {
     RE_VALIDATE_PATH.is_match(path.as_ref()).unwrap();
 
     let path_parts = path.as_ref().split("/");
     let mut fingers = vec![];
     let mut segments = vec![];
 
+    // TODO: skip first path_part
     for path_part in path_parts {
       let path_part = path_part.to_lowercase();
 
@@ -102,18 +103,22 @@ impl Router {
       if path_part.find("{") == None {
         let literal = path_part.clone();
         fingers.push(path_part);
-        segments.push(Segment { literal });
+        segments.push(SegmentRecord {
+          empty: None,
+          literal: Some(literal),
+          wildcard: None,
+        });
         continue;
       }
     }
 
-    let record = Record {
+    let analysis = Analysis {
       path: path.as_ref().to_string(),
       segments,
       params: vec![],
       fingerprint: format!("/{}", fingers.join("/")),
     };
-    record
+    analysis
   }
 }
 
@@ -124,18 +129,19 @@ mod tests {
   #[test]
   fn can_add_route() {
     let mut router = Router::new();
-    router.add(Method::Get, "/test", None);
+    router.add(Method::Get, "/test");
   }
 
   #[test]
   fn fails_invalid_path() {
     let mut router = Router::new();
-    router.add(Method::Get, "/{p}{x}b", None);
+    router.add(Method::Get, "/{p}{x}b");
   }
 
+  #[test]
   fn can_route() {
     let mut router = Router::new();
-    router.add(Method::Get, "/test", None);
+    router.add(Method::Get, "/test");
     let url = Url::parse("http://test.com/test");
     assert!(!url.is_err());
     let found = router.route(Method::Get, &url.unwrap());
