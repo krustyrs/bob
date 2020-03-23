@@ -48,10 +48,10 @@ impl SegmentRecord {
 
 #[derive(Debug, Clone)]
 pub struct Analysis {
-  path: String,
-  segments: Vec<SegmentRecord>,
-  params: Vec<String>,
-  fingerprint: String,
+  pub path: String,
+  pub segments: Vec<SegmentRecord>,
+  pub params: Vec<String>,
+  pub fingerprint: String,
 }
 
 #[derive(Debug, Clone)]
@@ -66,14 +66,14 @@ impl Segment {
     }
   }
 
-  pub fn add(&mut self, analysis: Analysis) {
+  pub fn add(&mut self, _analysis: Analysis) {
     /*
         { literal: 'x' }        -> x
         { empty: false }        -> {p}
         { wildcard: true }      -> {p*}
         { mixed: /regex/ }      -> a{p}b
     */
-
+    /*
     let current = analysis.segments[0];
     let remaining = analysis.segments.split_off(1);
     let is_edge = remaining.len() == 0;
@@ -93,5 +93,6 @@ impl Segment {
     }
 
     if is_literal {}
+    */
   }
 }

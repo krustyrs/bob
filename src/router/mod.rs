@@ -88,7 +88,7 @@ impl Router {
 
     let path_parts = path.as_ref().split("/");
     let mut fingers = vec![];
-    let mut params: Vec<SegmentRecord> = vec![];
+    let params: Vec<SegmentRecord> = vec![];
     let mut segments: Vec<SegmentRecord> = vec![];
 
     // TODO: skip first path_part
@@ -152,7 +152,9 @@ fn parse_params(part: String) -> Vec<SegmentRecord> {
           parts.push(record);
         }
       },
+      None => {}
     },
+    Err(_) => {}
   }
 
   parts
