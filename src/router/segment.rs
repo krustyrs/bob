@@ -1,50 +1,5 @@
+use super::segment_record::SegmentRecord;
 use std::collections::HashMap;
-
-#[derive(Debug, Clone)]
-pub struct SegmentRecord {
-  name: Option<String>,
-  count: Option<i32>,
-  empty: Option<bool>,
-  literal: Option<String>,
-  wildcard: Option<bool>,
-}
-
-impl SegmentRecord {
-  pub fn new() -> Self {
-    SegmentRecord {
-      name: None,
-      count: None,
-      empty: None,
-      literal: None,
-      wildcard: None,
-    }
-  }
-
-  pub fn with_name(mut self, name: String) -> Self {
-    self.name = Some(name);
-    self
-  }
-
-  pub fn with_count(mut self, count: i32) -> Self {
-    self.count = Some(count);
-    self
-  }
-
-  pub fn with_empty(mut self, empty: bool) -> Self {
-    self.empty = Some(empty);
-    self
-  }
-
-  pub fn with_literal(mut self, literal: String) -> Self {
-    self.literal = Some(literal);
-    self
-  }
-
-  pub fn with_wildcard(mut self, wildcard: bool) -> Self {
-    self.wildcard = Some(wildcard);
-    self
-  }
-}
 
 #[derive(Debug, Clone)]
 pub struct Analysis {

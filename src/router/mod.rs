@@ -4,10 +4,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 mod segment;
-use segment::{Analysis, Segment, SegmentRecord};
+mod segment_record;
+use segment::{Analysis, Segment};
+use segment_record::SegmentRecord;
 
 lazy_static! {
-  static ref RE_PARSE_PARAM: Regex = Regex::new(r"((?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+)|(?:\{(\w+)(?:(\*)(\d+)?)?(\?)?\})").unwrap();
+  static ref RE_PARSE_LITERAL_PARAM: Regex = Regex::new(r"((?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+)").unwrap();
+  static ref RE_PARSE_PARAM: Regex = Regex::new(r"(?:\{(\w+)(?:(\*)(\d+)?)?(\?)?\})").unwrap();
   static ref RE_VALIDATE_PATH: Regex = Regex::new(r"(?:^\/$)|(?:^(?:\/(?:(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+|(?:\{\w+(?:\*[1-9]\d*)?\})|(?:(?:(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+(?:\{\w+\??\}))+(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})*)|(?:(?:\{\w+\??\})(?:(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+(?:\{\w+\??\}))+(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})*)|(?:(?:\{\w+\??\})(?:[\w\!\$&'\(\)\*\+\,;\=\:@\-\.~]|%[A-F0-9]{2})+)))*(?:\/(?:\{\w+(?:(?:\*(?:[1-9]\d*)?)|(?:\?))?\})?)?$)").unwrap();
   static ref RE_VALIDATE_PATH_ENCODED: Regex = Regex::new(r"%(?:2[146-9A-E]|3[\dABD]|4[\dA-F]|5[\dAF]|6[1-9A-F]|7[\dAE])").unwrap();
 }
@@ -120,19 +123,12 @@ impl Router {
 fn parse_params(part: String) -> Vec<SegmentRecord> {
   let mut parts: Vec<SegmentRecord> = vec![];
 
-  // groups are: 0: literal, 1: name, 2: wildcard, 3: count, 4: empty
+  // groups are: 1: name, 2: wildcard, 3: count, 4: empty
   match RE_PARSE_PARAM.captures(part.as_str()) {
     Ok(captures) => match captures {
-      Some(captures) => match captures.get(0) {
-        Some(literal) => {
-          parts.push(SegmentRecord::new().with_literal(literal.as_str().to_string()));
-        }
-        None => {
-          let mut record = SegmentRecord::new();
-          record = match captures.get(1) {
-            Some(name) => record.with_name(name.as_str().to_string()),
-            None => record,
-          };
+      Some(captures) => match captures.get(1) {
+        Some(name) => {
+          let mut record = SegmentRecord::new().with_name(name.as_str().to_string());
 
           record = match captures.get(2) {
             Some(_wildcard) => record.with_wildcard(true),
@@ -144,13 +140,28 @@ fn parse_params(part: String) -> Vec<SegmentRecord> {
             None => record,
           };
 
-          record = match captures.get(2) {
+          record = match captures.get(4) {
             Some(_empty) => record.with_empty(true),
             None => record.with_empty(false),
           };
 
           parts.push(record);
+          return parts;
         }
+        None => {}
+      },
+      None => {}
+    },
+    Err(_) => {}
+  }
+
+  match RE_PARSE_LITERAL_PARAM.captures(part.as_str()) {
+    Ok(captures) => match captures {
+      Some(captures) => match captures.get(0) {
+        Some(literal) => {
+          parts.push(SegmentRecord::new().with_literal(literal.as_str().to_string()));
+        }
+        None => {}
       },
       None => {}
     },
@@ -200,5 +211,11 @@ mod tests {
       let result = RE_VALIDATE_PATH.is_match(valid);
       assert!(result.unwrap());
     }
+  }
+
+  #[test]
+  fn can_parse_params() {
+    let record = parse_params("{foo}".to_string());
+    println!("{}", record[0]);
   }
 }
