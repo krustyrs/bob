@@ -17,6 +17,7 @@ pub struct RouteConfig {
   pub vhost: String,
 }
 
+#[derive(Debug, Clone)]
 struct Entry {
   routes: Vec<String>, // TODO: Change to handlers
   segment: Segment,
@@ -32,7 +33,7 @@ pub struct Router {
 }
 
 impl Router {
-  pub fn new() -> Router {
+  pub fn new() -> Self {
     Router {
       inner: Arc::new(RouterInner {
         table: HashMap::new(),
@@ -40,7 +41,7 @@ impl Router {
     }
   }
 
-  pub fn add(&mut self, method: Method, path: impl AsRef<str>) -> &mut Router {
+  pub fn add(&mut self, method: Method, path: impl AsRef<str>) -> &mut Self {
     self.add_with_config(method, path, None)
   }
 
@@ -51,7 +52,7 @@ impl Router {
     config: Option<RouteConfig>,
   ) -> &mut Router {
     let analysis = self.analyze(path);
-    let mut entry = self.mut_inner().table.entry(method).or_insert(Entry {
+    let entry = self.mut_inner().table.entry(method).or_insert(Entry {
       routes: vec![],
       segment: Segment::new(),
     });
@@ -70,14 +71,8 @@ impl Router {
 
     match self.inner.table.get(&method) {
       None => "".to_string(),
-      Some(records) => {
-        for record in records {
-          if record.segments.len() == segments.len() {
-            return url.path().to_string();
-          }
-        }
-
-        "".to_string()
+      Some(_entry) => {
+        return url.path().to_string();
       }
     }
   }
@@ -93,7 +88,8 @@ impl Router {
 
     let path_parts = path.as_ref().split("/");
     let mut fingers = vec![];
-    let mut segments = vec![];
+    let mut params: Vec<SegmentRecord> = vec![];
+    let mut segments: Vec<SegmentRecord> = vec![];
 
     // TODO: skip first path_part
     for path_part in path_parts {
@@ -103,13 +99,12 @@ impl Router {
       if path_part.find("{") == None {
         let literal = path_part.clone();
         fingers.push(path_part);
-        segments.push(SegmentRecord {
-          empty: None,
-          literal: Some(literal),
-          wildcard: None,
-        });
+        segments.push(SegmentRecord::new().with_literal(literal));
         continue;
       }
+
+      // Parameter
+      let parts = parse_params(path_part);
     }
 
     let analysis = Analysis {
@@ -120,6 +115,47 @@ impl Router {
     };
     analysis
   }
+}
+
+fn parse_params(part: String) -> Vec<SegmentRecord> {
+  let mut parts: Vec<SegmentRecord> = vec![];
+
+  // groups are: 0: literal, 1: name, 2: wildcard, 3: count, 4: empty
+  match RE_PARSE_PARAM.captures(part.as_str()) {
+    Ok(captures) => match captures {
+      Some(captures) => match captures.get(0) {
+        Some(literal) => {
+          parts.push(SegmentRecord::new().with_literal(literal.as_str().to_string()));
+        }
+        None => {
+          let mut record = SegmentRecord::new();
+          record = match captures.get(1) {
+            Some(name) => record.with_name(name.as_str().to_string()),
+            None => record,
+          };
+
+          record = match captures.get(2) {
+            Some(_wildcard) => record.with_wildcard(true),
+            None => record.with_wildcard(false),
+          };
+
+          record = match captures.get(3) {
+            Some(count) => record.with_count(count.as_str().to_string().parse::<i32>().unwrap()),
+            None => record,
+          };
+
+          record = match captures.get(2) {
+            Some(_empty) => record.with_empty(true),
+            None => record.with_empty(false),
+          };
+
+          parts.push(record);
+        }
+      },
+    },
+  }
+
+  parts
 }
 
 #[cfg(test)]
