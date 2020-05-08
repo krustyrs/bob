@@ -215,7 +215,68 @@ mod tests {
 
   #[test]
   fn can_parse_params() {
-    let record = parse_params("{foo}".to_string());
-    println!("{}", record[0]);
+    struct TestCase {
+      input: String,
+      expected: SegmentRecord,
+    }
+
+    let testCases = vec![
+      TestCase {
+        input: "foo".to_string(),
+        expected: SegmentRecord {
+          name: None,
+          wildcard: None,
+          empty: None,
+          literal: Some("foo".to_string()),
+          count: None,
+        },
+      },
+      TestCase {
+        input: "{foo}".to_string(),
+        expected: SegmentRecord {
+          name: Some("foo".to_string()),
+          wildcard: Some(false),
+          empty: Some(false),
+          literal: None,
+          count: None,
+        },
+      },
+      TestCase {
+        input: "{foo*2}".to_string(),
+        expected: SegmentRecord {
+          name: Some("foo".to_string()),
+          wildcard: Some(true),
+          empty: Some(false),
+          literal: None,
+          count: Some(2),
+        },
+      },
+      TestCase {
+        input: "{foo*}".to_string(),
+        expected: SegmentRecord {
+          name: Some("foo".to_string()),
+          wildcard: Some(true),
+          empty: Some(false),
+          literal: None,
+          count: None,
+        },
+      },
+    ];
+
+    for testCase in testCases {
+      let actual = parse_params(testCase.input);
+      let record = actual.get(0).expect("missing record");
+      assert_eq!(record.name, testCase.expected.name, "mismatch name");
+      assert_eq!(
+        record.wildcard, testCase.expected.wildcard,
+        "mismatch wildcard"
+      );
+      assert_eq!(record.empty, testCase.expected.empty, "mismatch empty");
+      assert_eq!(
+        record.literal, testCase.expected.literal,
+        "mismatch literal"
+      );
+      assert_eq!(record.count, testCase.expected.count, "mismatch count");
+    }
   }
 }

@@ -2,11 +2,11 @@ use std::fmt;
 
 #[derive(Debug, Clone)]
 pub struct SegmentRecord {
-  name: Option<String>,
-  count: Option<i32>,
-  empty: Option<bool>,
-  literal: Option<String>,
-  wildcard: Option<bool>,
+  pub name: Option<String>,
+  pub count: Option<i32>,
+  pub empty: Option<bool>,
+  pub literal: Option<String>,
+  pub wildcard: Option<bool>,
 }
 
 impl SegmentRecord {
